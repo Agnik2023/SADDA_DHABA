@@ -4,10 +4,11 @@ Last updated: 2026-11-12
 
 ## Current phase
 
-Phase 9 — Deployment readiness. Application code and SQL are complete, the
-production build passes, and the full order lifecycle has been exercised against
-Postgres 18 with Supabase platform shims (44 checks). Live setup is blocked on
-Supabase credentials.
+Phase 10 — Live. The Supabase Free project is running in Mumbai, all five
+migrations are applied, the three staff accounts exist, the production build is
+deployed to Cloudflare Pages, and the live order lifecycle passed 31/31 checks.
+Remaining work is operational: dev TOTP enrollment, GitHub Actions secrets for
+backups/keep-alive, and a pilot shift.
 
 ## Locked decisions
 
@@ -43,8 +44,9 @@ Paid orders -> `CANCELLED` + `REFUNDED` by dev only (AAL2).
 - [x] 1C. RPC functions (`0003_rpc.sql`)
 - [x] 1D. Menu seed — 13 categories, 93 items (`0004_seed_menu.sql`)
 - [x] 1E. Realtime + pg_cron migration (`0005_realtime_cron.sql`)
-- [ ] 2. Supabase project created and migrations applied
-- [ ] 3. Staff Auth users, role rows, dev TOTP enrollment
+- [x] 2. Supabase project created and migrations applied (`xkdcckekjtqigmgbanrl`, `ap-south-1`, Free)
+- [x] 3a. Staff Auth users and role rows created; signups disabled
+- [ ] 3b. Dev TOTP enrollment (requires the owner's authenticator app)
 - [x] 4. Frontend foundation (types, client, query, cart, auth)
 - [x] 5. Customer menu -> cart -> checkout -> token status
 - [x] 6. Counter queue -> mark paid -> kitchen board
@@ -53,9 +55,23 @@ Paid orders -> `CANCELLED` + `REFUNDED` by dev only (AAL2).
 - [x] 9. Cloudflare Pages config (`_headers`, `_redirects`, `.nvmrc`, env example)
 - [x] 10. Backup and keep-alive GitHub workflows
 - [x] 10a. Migration lifecycle validated against Postgres 18 (PGlite, 44 checks)
-- [ ] 11. Apply migrations, RLS/order-flow smoke tests in a live project
-- [ ] 12. Deploy to Cloudflare Pages and set environment variables
+- [x] 11. Migrations applied; live RLS/gate/cancellation/token tests passed (31/31)
+- [x] 12. Deployed to Cloudflare Pages with production Supabase env baked in
 - [ ] 13. Pilot shift and go-live
+
+## Live deployment
+
+- Guest site: https://sadda-dhaba.pages.dev/
+- Staff console: https://sadda-dhaba.pages.dev/admin
+- Supabase project: `xkdcckekjtqigmgbanrl` (`ap-south-1`, Free plan)
+- Cloudflare Pages project: `sadda-dhaba`
+- Auth: signups disabled, email/password only, TOTP enabled for MFA
+- Staff: `dev`, `counter`, `kitchen` users created; role rows inserted
+- Database: 13 categories, 93 menu items, Realtime publication (orders,
+  order_items, menu_items, categories), stale-order cron every 5 minutes
+- Live tests: guest quote/order/token tracking, idempotency, anon and kitchen
+  RLS denial for unpaid orders, counter payment gate, kitchen status flow,
+  unpaid cancellation, and refund denial for counter all passed
 
 ## Completed files
 
@@ -99,25 +115,30 @@ runs migrations `0001`–`0005` against PGlite (PostgreSQL 18) with shims for
 seed counts, quoting, idempotency, token lookup/reissue, RLS visibility, the
 kitchen payment gate, payment audit, status transitions, refunds with/without
 AAL2, walk-ins, availability, cancellation, stale auto-cancel, and rate limits.
-The 0005 publication/cron statements also apply in PGlite. Live Supabase
-RLS/Realtime/cron behavior still needs the project smoke test.
+The 0005 publication/cron statements also apply in PGlite. The deployed
+Supabase project then passed 31/31 live checks covering the same critical paths
+against real Auth, PostgREST, RLS, and pg_cron.
 
-## Blocked
+## Remaining
 
-- No Supabase project URL / anon key, so migrations are not applied and live RLS, Realtime, cron, and order-flow tests cannot run.
-- Actual deployment and staff-account creation require Supabase credentials and a Cloudflare Pages project.
+- Enroll the dev account's TOTP factor at `/admin`, save the recovery code, and
+  verify AAL2 gates (refund, menu writes, settings).
+- Add `SUPABASE_DB_URL`, `BACKUP_PASSPHRASE`, `SUPABASE_URL`, and
+  `SUPABASE_ANON_KEY` GitHub Actions secrets, then run both workflows once.
+- Test a restore from the encrypted backup artifact before the pilot.
+- Connect the GitHub repo to Cloudflare Pages for auto-deploy, or keep using
+  `wrangler pages deploy dist --project-name sadda-dhaba`.
+- Run a pilot shift, then monitor the counter queue, kitchen board, and history.
 
 ## Next move
 
-0. Repository is committed and pushed: `origin/main` at `a1de71d`.
-1. Create the Supabase project; run migrations `0001` -> `0005` in the SQL Editor (enable `pg_cron`/Realtime if prompted).
-2. Send the project URL and anon/publishable key so the frontend can be configured; never send the `service_role` key or database password in chat.
-3. Create `dev`, `counter`, `kitchen` Auth users, insert `public.staff` rows, disable new-user signups.
-4. Run the README smoke test: guest order -> unpaid hidden from kitchen -> counter mark paid -> kitchen prep -> handover -> history CSV.
-5. Enroll dev TOTP and verify AAL2 gates (refund/menu/settings).
-6. Deploy to Cloudflare Pages; set env vars for production.
-7. Add `SUPABASE_DB_URL`, `BACKUP_PASSPHRASE`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` GitHub secrets and manually run both workflows once.
-8. Test a restore from the encrypted artifact before the pilot.
+1. Sign in at `/admin` with the dev account and complete TOTP enrollment.
+2. Add the four GitHub Actions secrets from the local credentials file and
+   trigger `backup.yml` and `keep-alive.yml` once.
+3. Download the encrypted backup artifact and verify a restore into a scratch
+   project.
+4. Connect the repository in the Cloudflare Pages dashboard if automatic
+   deploys are wanted; otherwise deploy with Wrangler after each build.
 
 ## Operational reminders
 
