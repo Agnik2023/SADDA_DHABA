@@ -109,8 +109,9 @@ RLS/Realtime/cron behavior still needs the project smoke test.
 
 ## Next move
 
-1. Create the Supabase project; copy `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-2. Run migrations `0001` -> `0005` in the SQL Editor (enable `pg_cron`/Realtime if prompted).
+0. Repository is committed and pushed: `origin/main` at `a1de71d`.
+1. Create the Supabase project; run migrations `0001` -> `0005` in the SQL Editor (enable `pg_cron`/Realtime if prompted).
+2. Send the project URL and anon/publishable key so the frontend can be configured; never send the `service_role` key or database password in chat.
 3. Create `dev`, `counter`, `kitchen` Auth users, insert `public.staff` rows, disable new-user signups.
 4. Run the README smoke test: guest order -> unpaid hidden from kitchen -> counter mark paid -> kitchen prep -> handover -> history CSV.
 5. Enroll dev TOTP and verify AAL2 gates (refund/menu/settings).
