@@ -127,6 +127,8 @@ Sign in at `/admin` with the dev account. The console shows a QR code and setup 
 2. Enter the 6-digit code.
 3. Store the setup key somewhere safe (password manager / sealed envelope).
 
+TOTP MFA is enabled by default on Supabase projects; no extra dashboard toggle is usually needed.
+
 Counter and kitchen accounts use a password only. A lost dev authenticator requires an owner/admin reset in Supabase; keep at least two dev accounts or a recovery plan.
 
 ### 6. Verify RLS
@@ -320,7 +322,8 @@ BUILD_STATE.md           resumable build/deployment checklist
 | --- | --- |
 | “Backend not configured” screen | Add both `VITE_` variables and restart/redeploy. |
 | Staff login says “no staff profile” | Insert the user's UUID into `public.staff` with an active role. |
-| Dev sees the MFA screen every time | Complete TOTP enrollment/verification; check the account's `aal` claim. |
+| Dev sees the MFA screen every time | Complete TOTP enrollment/verification; check the account's `aal` claim. TOTP is enabled by default on Supabase projects (`Authentication → Multi-Factor`). |
+| Dev QR/enrollment fails | Confirm TOTP MFA is enabled under **Authentication → Multi-Factor**, then reload the console. |
 | Kitchen screen is empty | This is correct until the counter confirms payment. Check the counter queue for unpaid orders. |
 | `permission denied for function` | Re-run `0002` and `0003`; confirm the role row exists and is active. |
 | Realtime not updating | Check **Database → Replication** includes `orders`, `order_items`, `menu_items`, `categories`; re-run `0005`. |
