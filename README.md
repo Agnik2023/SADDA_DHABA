@@ -7,6 +7,71 @@ A production-oriented ordering system for a single restaurant:
 - Staff sign in with Supabase Auth. `dev` accounts also require a TOTP authenticator code.
 - Runs at **zero recurring cost** on Cloudflare Pages (frontend) and Supabase Free (Postgres, Auth, Realtime).
 
+**Live:** https://sadda-dhaba.pages.dev/ · **Staff console:** https://sadda-dhaba.pages.dev/admin
+
+---
+
+## Status
+
+The system is deployed and accepting orders.
+
+| Surface | URL |
+| --- | --- |
+| Guest menu | https://sadda-dhaba.pages.dev/ |
+| Staff console | https://sadda-dhaba.pages.dev/admin |
+| Order tracking | https://sadda-dhaba.pages.dev/order#<token> |
+
+- **Backend:** Supabase Free, project `xkdcckekjtqigmgbanrl`, Mumbai (`ap-south-1`)
+- **Frontend:** Cloudflare Pages, project `sadda-dhaba`
+- **Database:** 13 categories, 93 seeded items, Realtime publication, 5-minute stale-order cron
+- **Staff:** `dev`, `counter`, and `kitchen` accounts created; public signups disabled
+- **Validation:** 44 migration checks in PGlite plus **31/31 live end-to-end checks** against the deployed stack
+
+Outstanding operations work: dev TOTP enrollment, GitHub Actions secrets for the backup/keep-alive workflows, and a pilot shift. See [`BUILD_STATE.md`](BUILD_STATE.md).
+
+## What's built
+
+### Guest ordering
+
+- 13 categories and 93 seeded menu items with prices in paise, veg markers, descriptions, and availability.
+- Cart, dine-in/takeaway selection, optional table number, guest name/phone snapshot, and order notes.
+- Server-side quoting with configurable GST (5% default); client-supplied prices are ignored.
+- Idempotent order creation, private tracking link (`/order#<token>`), and a live status timeline.
+- Abuse limits: 3 orders/10 minutes, 10/24 hours, and 2 unpaid orders per phone.
+- Stale unpaid orders auto-cancel after 30 minutes (configurable).
+
+### Counter
+
+- Live queue with search, separate unpaid and active queues, and order details.
+- Collect cash, UPI, or card payment after physical verification; this is the only path that releases an order to the kitchen.
+- Create walk-in/phone orders, cancel unpaid orders with a reason, and reissue a guest's tracking link.
+- Toggle item availability, browse history, inspect the audit trail, and export CSV.
+
+### Kitchen
+
+- Paid orders only, enforced by Postgres RLS rather than UI hiding.
+- Realtime ticket board with chime, fullscreen mode, and preparation status flow.
+- `QUEUED → PREPARING → READY` for takeaway or `SERVED` for dine-in.
+
+### Dev
+
+- Full menu and category CRUD, price/availability changes, GST and restaurant settings.
+- Paid-order refunds and paid-order cancellation, gated by TOTP **AAL2** in the database.
+- History search, audit trail, and CSV export.
+
+### Platform
+
+- Postgres schema, constraints, indexes, RLS policies, and `SECURITY DEFINER` RPCs.
+- Supabase Auth with email/password for staff; no customer accounts.
+- Realtime invalidation for orders, order items, menu items, and categories.
+- `pg_cron` stale-order cancellation every 5 minutes.
+- Cloudflare Pages with CSP, security headers, SPA fallback, and asset caching.
+- Nightly encrypted `pg_dump` backup workflow and a daily keep-alive workflow (GitHub secrets pending).
+
+### Stack
+
+React 19 · TypeScript · Vite 8 · Tailwind CSS · TanStack Query · Supabase JS · Supabase Postgres/Auth/Realtime · Cloudflare Pages
+
 ---
 
 ## How an order works
@@ -64,7 +129,9 @@ npm run preview   # serve the production build locally
 
 ---
 
-## Supabase setup (one time)
+## Fresh Supabase setup (reproducible)
+
+> The live project is already provisioned. Use this section to rebuild a new environment or to understand how the current one is configured.
 
 ### 1. Create the project
 
@@ -145,9 +212,11 @@ Also confirm the kitchen cannot read `order_tokens` and that only `mark_paid` ca
 
 ---
 
-## Deploy to Cloudflare Pages (free)
+## Deploying to Cloudflare Pages (free)
 
-1. Push this repository to GitHub.
+> The live site is currently deployed by direct upload from `dist/`. Connect the GitHub repository below to enable automatic deploys on push.
+
+1. Push this repository to GitHub (the live repo is [Agnik2023/SADDA_DHABA](https://github.com/Agnik2023/SADDA_DHABA)).
 2. Cloudflare Dashboard → **Workers & Pages → Create → Pages → Connect to Git**.
 3. Select the repository and use:
    - **Framework preset**: Vite
@@ -278,7 +347,9 @@ Cloudflare Pages Free allows commercial use (unlike Vercel Hobby). There is no s
 
 ---
 
-## Smoke test before go-live
+## Smoke test (rerun after changes)
+
+> The initial live run passed **31/31 checks**. These steps are the manual acceptance pass for a new deployment or a significant change.
 
 1. Load `/` on a phone; confirm all 13 categories and 93 items appear.
 2. Add items, checkout with a real name/phone, choose dine-in + table, place the order.
