@@ -1,0 +1,73 @@
+name: Supabase encrypted backup
+
+# Supabase Free has no automatic backups. This workflow saves an encrypted
+# logical dump of the public schema as a GitHub Actions artifact every night.
+#
+# Required repository secrets:
+#   SUPABASE_DB_URL    Postgres connection string (prefer the session pooler)
+#   BACKUP_PASSPHRASE  Long random passphrase, stored in a password manager
+#
+# Download an artifact, then decrypt with:
+#   gpg --decrypt sadda-dhaba-YYYY-MM-DD.sql.gpg > sadda.sql
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check secrets
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "::error::Missing SUPABASE_DB_URL repository secret."
+            exit 1
+          fi
+          if [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+            echo "::error::Missing BACKUP_PASSPHRASE repository secret."
+            exit 1
+          fi
+
+      - name: Dump public schema
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e SUPABASE_DB_URL \
+            -v "$PWD:/backup" \
+            postgres:17 \
+            sh -c 'pg_dump --no-owner --no-privileges --schema=public --clean --if-exists "$SUPABASE_DB_URL" -f /backup/sadda.sql'
+          test -s sadda.sql
+          echo "Dump size: $(wc -c < sadda.sql) bytes"
+
+      - name: Encrypt dump
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y-%m-%d)"
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase "$BACKUP_PASSPHRASE" \
+            -o "sadda-dhaba-${STAMP}.sql.gpg" sadda.sql
+          rm -f sadda.sql
+          test -s "sadda-dhaba-${STAMP}.sql.gpg"
+
+      - name: Upload encrypted artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sadda-dhaba-backup-${{ github.run_id }}
+          path: "*.sql.gpg"
+          retention-days: 30
+          if-no-files-found: error
