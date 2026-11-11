@@ -4,7 +4,7 @@ A production-oriented ordering system for a single restaurant:
 
 - Guests browse the menu, place an order, and **pay at the counter**. No customer accounts, no OTP, no online payment.
 - Only **paid orders reach the kitchen**. Counter staff physically verify cash/UPI/card and confirm the payment.
-- Staff sign in with Supabase Auth. `dev` accounts also require a TOTP authenticator code.
+- Staff sign in with Supabase Auth (email and password). Public signups are disabled.
 - Runs at **zero recurring cost** on Cloudflare Pages (frontend) and Supabase Free (Postgres, Auth, Realtime).
 
 **Live:** https://sadda-dhaba.pages.dev/ · **Staff console:** https://sadda-dhaba.pages.dev/admin
@@ -27,7 +27,7 @@ The system is deployed and accepting orders.
 - **Staff:** `dev`, `counter`, and `kitchen` accounts created; public signups disabled
 - **Validation:** 44 migration checks in PGlite plus **31/31 live end-to-end checks** against the deployed stack
 
-Outstanding operations work: dev TOTP enrollment, GitHub Actions secrets for the backup/keep-alive workflows, and a pilot shift. See [`BUILD_STATE.md`](BUILD_STATE.md).
+Outstanding operations work: GitHub Actions secrets for the backup/keep-alive workflows and a pilot shift. See [`BUILD_STATE.md`](BUILD_STATE.md).
 
 ## What's built
 
@@ -56,7 +56,7 @@ Outstanding operations work: dev TOTP enrollment, GitHub Actions secrets for the
 ### Dev
 
 - Full menu and category CRUD, price/availability changes, GST and restaurant settings.
-- Paid-order refunds and paid-order cancellation, gated by TOTP **AAL2** in the database.
+- Paid-order refunds and paid-order cancellation, restricted to the dev account in the database.
 - History search, audit trail, and CSV export.
 
 ### Platform
@@ -96,11 +96,11 @@ AWAITING_PAYMENT ── counter verifies money ──► QUEUED ──► PREPAR
 
 | Role | Can do |
 | --- | --- |
-| `dev` | Everything: counter, kitchen, menu CRUD, categories, settings, refunds. Requires TOTP for privileged actions. |
+| `dev` | Everything: counter, kitchen, menu CRUD, categories, settings, refunds. |
 | `counter` | Collect/confirm payments, create walk-in orders, cancel unpaid orders, toggle item availability, view history, reissue tracking links. |
 | `kitchen` | See paid orders only, move `QUEUED → PREPARING → READY/SERVED`. |
 
-`dev` actions that change money or configuration (refunds, menu writes, settings) require **AAL2**—a session that passed TOTP—and are checked again inside the database.
+`dev` actions that change money or configuration (refunds, menu writes, settings) are restricted to the dev role and checked again inside the database.
 
 ---
 
@@ -186,17 +186,11 @@ In **Authentication → Providers → Email**:
 - Turn **off** “Allow new users to sign up”. Staff users are created by the owner from the dashboard.
 - Leave email confirmation on for new users (auto-confirm the accounts you create).
 
-### 5. Enroll the dev authenticator
+### 5. Verify dev access
 
-Sign in at `/admin` with the dev account. The console shows a QR code and setup key:
+Sign in at `/admin` with the dev account using email and password. The dev console should open directly (no authenticator code). Confirm the dev can access Menu, Settings, History, and refunds.
 
-1. Scan it with Google Authenticator, Authy, 1Password, etc.
-2. Enter the 6-digit code.
-3. Store the setup key somewhere safe (password manager / sealed envelope).
-
-TOTP MFA is enabled by default on Supabase projects; no extra dashboard toggle is usually needed.
-
-Counter and kitchen accounts use a password only. A lost dev authenticator requires an owner/admin reset in Supabase; keep at least two dev accounts or a recovery plan.
+Counter and kitchen accounts also sign in with a password only. If you want to add TOTP/MFA later, it must be re-enabled in Supabase Auth and in the application/database policies.
 
 ### 6. Verify RLS
 
@@ -260,7 +254,7 @@ Preview builds point at the same Supabase project unless you create a second pro
 - `/admin/menu` — add/edit/delete items and categories, change prices, toggle availability.
 - `/admin/settings` — GST rate, unpaid timeout, restaurant name.
 - `/admin/history` — filter by date/status, search, view audit trail, export CSV.
-- Refunds: open a paid order → **Refund (dev)**. This requires AAL2 and records the refund reason in the audit trail.
+- Refunds: open a paid order → **Refund (dev)**. This is restricted to the dev account and records the refund reason in the audit trail.
 
 ### Auto-cancellation
 
@@ -282,7 +276,7 @@ Adjust these inside `create_order` if the restaurant needs different limits.
 - Only SHA-256 hashes of tokens are stored. Reissuing a link invalidates the previous one.
 - All price/order/payment writes go through `SECURITY DEFINER` RPCs with a fixed `search_path`. There are no client insert/update policies on orders.
 - Payment confirmation (`mark_paid`) is the single gate into the kitchen. It stores the staff user ID, role, method, amount, and timestamp.
-- Refunds and paid-order cancellation require `dev` + AAL2.
+- Refunds and paid-order cancellation require the `dev` role and are enforced in the database.
 - Staff sessions live in `sessionStorage` and are cleared when the tab closes. The counter/dev console locks after 15 idle minutes; kitchen locks after 8 hours.
 - CSP in `_headers` restricts scripts to the site itself and connections to `*.supabase.co`.
 
@@ -359,7 +353,7 @@ Cloudflare Pages Free allows commercial use (unlike Vercel Hobby). There is no s
 6. Kitchen: start preparing → mark served/ready. Counter: complete handover.
 7. Confirm the guest tracking page updates automatically.
 8. Dev: change GST, add a test item, mark an item sold out, and verify the customer menu reflects it.
-9. Dev: refund a test paid order (AAL2) and confirm the audit trail and guest page.
+9. Dev: refund a test paid order and confirm the audit trail and guest page.
 10. Sign in as `kitchen` and confirm `/admin/settings`, `/admin/menu`, and unpaid orders are inaccessible.
 11. Refresh `/admin/counter` directly: the SPA should load, not 404.
 12. Export a CSV from History and open it in Excel/Sheets.
@@ -371,7 +365,7 @@ Cloudflare Pages Free allows commercial use (unlike Vercel Hobby). There is no s
 ```
 src/
   components/customer/   guest menu, cart, checkout, token tracking
-  components/admin/      login, MFA, counter, kitchen, menu, history, settings
+  components/admin/      login, lock screen, counter, kitchen, menu, history, settings
   components/common/     badge, modal, config notice
   context/               cart, staff auth + idle lock, toasts
   hooks/useMenu.ts       React Query hooks + realtime invalidation
@@ -393,8 +387,6 @@ BUILD_STATE.md           resumable build/deployment checklist
 | --- | --- |
 | “Backend not configured” screen | Add both `VITE_` variables and restart/redeploy. |
 | Staff login says “no staff profile” | Insert the user's UUID into `public.staff` with an active role. |
-| Dev sees the MFA screen every time | Complete TOTP enrollment/verification; check the account's `aal` claim. TOTP is enabled by default on Supabase projects (`Authentication → Multi-Factor`). |
-| Dev QR/enrollment fails | Confirm TOTP MFA is enabled under **Authentication → Multi-Factor**, then reload the console. |
 | Kitchen screen is empty | This is correct until the counter confirms payment. Check the counter queue for unpaid orders. |
 | `permission denied for function` | Re-run `0002` and `0003`; confirm the role row exists and is active. |
 | Realtime not updating | Check **Database → Replication** includes `orders`, `order_items`, `menu_items`, `categories`; re-run `0005`. |

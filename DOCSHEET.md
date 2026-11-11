@@ -56,7 +56,7 @@ Owner/dev can refund a paid order if needed
 | **Kitchen** | Kitchen staff | See **paid** orders only, move orders to Preparing → Ready/Served, use fullscreen board and sound alert |
 | **Dev / Owner** | Owner/manager | Everything above, plus edit menu and prices, add/remove categories, change GST/settings, issue refunds on paid orders, view full audit trail |
 
-**Extra security for owner/dev:** the owner account uses a password **and** a 6-digit code from an authenticator app (TOTP) for sensitive actions like refunds, menu changes, and settings.
+**Owner/dev access:** sign in with the dev account's email and password. Dev-only actions (menu, settings, refunds) are restricted to the dev role and enforced in the database. Keep the password private and let sessions lock when idle.
 
 ### 4. Daily operation
 
@@ -84,7 +84,7 @@ Owner/dev can refund a paid order if needed
 1. **Menu:** add/edit items, change prices, mark sold out, manage categories.
 2. **Settings:** restaurant name, GST rate, unpaid-order timeout.
 3. **History:** search orders, see audit trail, export CSV for records.
-4. **Refunds:** only the owner/dev account can refund a paid order (requires authenticator code).
+4. **Refunds:** only the owner/dev account can refund a paid order.
 
 ### 5. Menu and pricing (current setup)
 
@@ -98,7 +98,6 @@ Owner/dev can refund a paid order if needed
 | Item | Why it matters |
 | --- | --- |
 | **Owner/dev password** | Full access to menu, settings, refunds, and history |
-| **Authenticator app / TOTP setup** | Required for owner/dev sensitive actions; losing it requires an admin reset |
 | **Counter & kitchen passwords** | Control daily operations |
 | **Staff credentials file** (provided at setup) | Contains logins and operational secrets — store in a password manager or a locked place, then delete loose copies |
 | **Guest tracking links** | Private; anyone with the link can view that order’s status. Counter can reissue a link if a guest loses it |
@@ -135,7 +134,7 @@ Owner/dev can refund a paid order if needed
 | Order says waiting for payment too long | It may have auto-cancelled after timeout | Check History; place a new order if needed |
 | Guest lost tracking link | Link is private and not guessable | Counter: **Reissue customer link** |
 | Staff can’t log in / “no staff profile” | Account not linked to a staff role | Owner/admin must check the staff account in Supabase |
-| Owner asked for authenticator code repeatedly | TOTP enrollment/verification incomplete | Complete dev TOTP enrollment at first login; keep the authenticator device available |
+| Owner cannot save menu/settings or refund | Account is not an active dev role, or session expired | Sign in with the dev account, confirm its `staff` role is `dev` and active, then retry |
 | Site says backend/config issue | Deployment configuration problem | Contact the developer/maintainer |
 
 ---
@@ -158,7 +157,7 @@ flowchart LR
     end
 
     subgraph Supabase[Supabase Free - Mumbai ap-south-1]
-      A[Auth\nemail/password + TOTP MFA]
+      A[Auth\nemail/password staff login]
       R[PostgREST + RPC]
       DB[(Postgres\nschema, RLS, RPCs, seed)]
       RT[Realtime\npostgres_changes]
@@ -173,7 +172,7 @@ flowchart LR
     G -->|anon key + RPC/read| R
     C -->|JWT session| R
     K -->|JWT session| R
-    D -->|JWT session (AAL1/AAL2)| R
+    D -->|JWT session| R
 
     R --> DB
     A --> R
@@ -193,7 +192,7 @@ flowchart LR
 | Frontend | React 19, TypeScript, Vite 8, Tailwind CSS, TanStack Query, React Router, Supabase JS |
 | Hosting | Cloudflare Pages (static build from `dist/`) |
 | Database | Supabase Postgres (integer paise for money, constraints, indexes, triggers) |
-| Auth | Supabase Auth (email/password staff sessions, TOTP MFA for dev) |
+| Auth | Supabase Auth (email/password staff sessions) |
 | API surface | Supabase PostgREST (table reads where allowed) + Postgres RPC (`SECURITY DEFINER` functions) |
 | Live updates | Supabase Realtime (`postgres_changes` on orders, order_items, menu_items, categories) |
 | Scheduled jobs | `pg_cron` calling `cancel_stale_unpaid_orders()` every 5 minutes |
@@ -226,7 +225,7 @@ Access is enforced in the database, not only in the UI:
 | `order_tokens` | No | No | No | No (RLS enabled, no policies; accessed only by security-definer RPCs) |
 | `order_events` | No | No | Yes (per policy) | Yes |
 | Create/pay/status/cancel via RPC | `quote_order`, `create_order`, `get_order_by_token` | `update_order_status` (allowed transitions) | payment/cancel/walk-in/availability/reissue RPCs | all staff RPCs |
-| Refund / privileged config writes | No | No | No | Yes, and **AAL2 required** for refund/menu/settings-sensitive paths |
+| Refund / privileged config writes | No | No | No | Yes (dev role, enforced by RLS/RPCs) |
 
 **Payment gate:** `mark_paid` is the only operation that moves an order from `AWAITING_PAYMENT` to `QUEUED` (paid). Because kitchen RLS only exposes `payment_status = 'PAID'`, unpaid orders are invisible to kitchen at the data layer.
 
@@ -263,19 +262,19 @@ Access is enforced in the database, not only in the UI:
 #### E. Cancellation, refund, and stale orders
 
 - **Unpaid cancel:** counter/dev can cancel with a reason (`CANCELLED`).
-- **Paid cancel/refund:** dev-only, requires **AAL2** (TOTP-verified session); records refund/cancel reason in audit trail.
+- **Paid cancel/refund:** dev-only (database-enforced); records refund/cancel reason in audit trail.
 - **Auto-cancel:** `pg_cron` runs every 5 minutes to cancel unpaid orders older than `unpaid_timeout_minutes` (default 30).
 
 #### F. Realtime updates
 
 Supabase Realtime publishes changes for `orders`, `order_items`, `menu_items`, and `categories`. The frontend invalidates/refetches React Query data so counter, kitchen, and guest tracking views stay current without manual refresh.
 
-#### G. Staff authentication and MFA
+#### G. Staff authentication
 
 - Staff accounts are email/password users in Supabase Auth; each must have an active row in `public.staff` with a role.
 - Public signups are disabled; accounts are created by the owner/admin.
-- **Dev** privileges for sensitive operations require **AAL2** (TOTP). Counter and kitchen use password-only sessions.
-- Staff sessions use `sessionStorage` (cleared when the tab closes). Idle lock: counter/dev 15 minutes, kitchen 8 hours. Re-unlocking the dev session can drop AAL2 until TOTP is completed again (expected).
+- **Dev** privileges are granted by the dev role (no TOTP/authenticator step after login in the current setup). Counter and kitchen also sign in with password only.
+- Staff sessions use `sessionStorage` (cleared when the tab closes). Idle lock: counter/dev 15 minutes, kitchen 8 hours. Re-unlocking requires the account password.
 
 ### 6. Security model (summary)
 
@@ -309,7 +308,7 @@ Supabase Realtime publishes changes for `orders`, `order_items`, `menu_items`, a
 ```text
 src/
   components/customer/   guest menu, cart, checkout, token tracking
-  components/admin/      login, MFA, counter, kitchen, menu, history, settings
+  components/admin/      login, lock screen, counter, kitchen, menu, history, settings
   components/common/     shared UI (badges, modals, notices)
   context/               cart, staff auth + idle lock, toasts
   hooks/useMenu.ts       data fetching, polling, realtime invalidation

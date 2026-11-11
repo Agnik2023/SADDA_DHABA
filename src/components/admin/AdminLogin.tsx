@@ -76,7 +76,7 @@ export const AdminLogin: React.FC = () => {
             </div>
             <div className="flex items-center gap-2.5 rounded-xl border border-stone-800 bg-stone-900/70 p-3">
               <LockKeyhole className="h-4 w-4 text-amber-400" />
-              <span>Dev actions require an authenticator code</span>
+              <span>Password-protected staff access with idle lock</span>
             </div>
             <div className="flex items-center gap-2.5 rounded-xl border border-stone-800 bg-stone-900/70 p-3">
               <Utensils className="h-4 w-4 text-orange-400" />
@@ -174,8 +174,8 @@ export const AdminLogin: React.FC = () => {
             </form>
 
             <div className="mt-5 rounded-xl bg-stone-50 p-3 text-[11px] leading-relaxed text-stone-500">
-              Dev accounts are asked for a 6-digit authenticator code after the password. Counter
-              and kitchen accounts sign in with a password only.
+              Dev, counter, and kitchen accounts sign in with email and password. Sessions clear when
+              the tab closes and lock after inactivity.
             </div>
           </div>
 

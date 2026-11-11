@@ -6,7 +6,6 @@ import { useStaffRealtime } from "../../hooks/useMenu";
 import { isSupabaseConfigured } from "../../lib/supabase";
 import { ConfigNotice } from "../common/ConfigNotice";
 import { AdminLogin } from "./AdminLogin";
-import { MfaChallenge } from "./MfaChallenge";
 import { LockScreen } from "./LockScreen";
 import { AdminNavbar } from "./AdminNavbar";
 import { CounterQueue } from "./CounterQueue";
@@ -46,7 +45,7 @@ const FullScreenMessage: React.FC<{
 );
 
 export const AdminDashboard: React.FC = () => {
-  const { session, staff, loading, staffError, mfaRequired, locked, signOut } = useStaffAuth();
+  const { session, staff, loading, staffError, locked, signOut } = useStaffAuth();
 
   useStaffRealtime(Boolean(staff) && !locked);
 
@@ -104,9 +103,7 @@ export const AdminDashboard: React.FC = () => {
     );
   }
 
-  if (mfaRequired) return <MfaChallenge />;
-
-  if (locked || !session) return <LockScreen />;
+  if (locked) return <LockScreen />;
 
   const home = staff.role === "kitchen" ? "/admin/kitchen" : "/admin/counter";
 

@@ -23,12 +23,12 @@ const MESSAGES: Record<string, string> = {
   INVALID_STATE: "This order is not in a state that allows that action.",
   PAYMENT_REQUIRED: "Payment must be collected before the kitchen can start.",
   INVALID_TRANSITION: "That status change is not allowed.",
-  REFUND_REQUIRES_DEV: "Only a dev account with two-factor verification can refund a paid order.",
+  REFUND_REQUIRES_DEV: "Only a dev account can refund a paid order.",
   NOT_PAID: "This order has not been paid.",
   INVALID_REASON: "Enter a cancellation reason (3–240 characters).",
   ITEM_NOT_FOUND: "Menu item not found.",
   NOT_AUTHENTICATED: "Please sign in again.",
-  MFA_REQUIRED: "Two-factor verification is required.",
+  MFA_REQUIRED: "Please sign in again.",
 };
 
 export function errorMessage(error: unknown): string {

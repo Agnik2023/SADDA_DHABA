@@ -29,8 +29,7 @@ as $$
     where id = auth.uid()
       and role = 'dev'
       and active = true
-  )
-  and coalesce(auth.jwt() ->> 'aal', 'aal1') = 'aal2';
+  );
 $$;
 
 create or replace function public.can_read_order(p_order_id uuid)
@@ -63,7 +62,7 @@ alter table public.order_items enable row level security;
 alter table public.order_tokens enable row level security;
 alter table public.order_events enable row level security;
 
--- Staff: each user can read their own row. A fully verified dev can read all.
+-- Staff: each user can read their own row. A dev can read all.
 drop policy if exists staff_read_self_or_dev on public.staff;
 create policy staff_read_self_or_dev
 on public.staff
@@ -71,7 +70,7 @@ for select
 to authenticated
 using (id = auth.uid() or public.is_dev());
 
--- Menu is public read; only a fully verified dev can write it directly.
+-- Menu is public read; only a dev can write it directly.
 drop policy if exists categories_public_read on public.categories;
 create policy categories_public_read
 on public.categories
@@ -102,7 +101,7 @@ to authenticated
 using (public.is_dev())
 with check (public.is_dev());
 
--- Settings are public read; only a fully verified dev can update them.
+-- Settings are public read; only a dev can update them.
 drop policy if exists app_settings_public_read on public.app_settings;
 create policy app_settings_public_read
 on public.app_settings
@@ -164,8 +163,8 @@ grant select on public.orders, public.order_items, public.order_events, public.s
   to authenticated;
 
 -- Direct menu writes are required for the dev console. RLS still restricts
--- these grants to a fully verified dev (AAL2). Counter availability changes
--- go through set_menu_item_availability().
+-- these grants to a dev. Counter availability changes go through
+-- set_menu_item_availability().
 grant insert, update, delete on public.categories, public.menu_items
   to authenticated;
 

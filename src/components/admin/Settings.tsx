@@ -26,7 +26,7 @@ interface FormState {
 
 export const Settings: React.FC = () => {
   const { data: settings, isLoading, isError, error, refetch, isFetching } = useSettings();
-  const { staff, currentLevel } = useStaffAuth();
+  const { staff } = useStaffAuth();
   const { notify } = useToast();
   const queryClient = useQueryClient();
 
@@ -48,7 +48,6 @@ export const Settings: React.FC = () => {
   }, [settings]);
 
   const isDev = staff?.role === "dev";
-  const mfaReady = currentLevel === "aal2";
 
   const validate = (): { name: string; taxBps: number; timeout: number } | null => {
     const name = form.restaurantName.trim();
@@ -127,13 +126,12 @@ export const Settings: React.FC = () => {
         </button>
       </div>
 
-      {!mfaReady && (
+      {!isDev && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <strong>Two-factor verification is required.</strong> Settings changes are blocked by
-            the database until this dev session is at AAL2. Sign out and sign in again, then enter
-            your authenticator code.
+            <strong>Owner access required.</strong> Settings can only be changed by the dev/owner
+            account.
           </span>
         </div>
       )}
@@ -255,7 +253,7 @@ export const Settings: React.FC = () => {
           <div className="flex justify-end">
             <button
               onClick={() => void save()}
-              disabled={busy || !isDev || !mfaReady}
+              disabled={busy || !isDev}
               className="flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-orange-600/20 transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -280,7 +278,7 @@ export const Settings: React.FC = () => {
             <ul className="mt-2 space-y-1.5 text-[11px] leading-relaxed">
               <li>
                 <strong className="text-violet-700">Dev</strong> — full access, menu edits,
-                settings, refunds. Requires TOTP.
+                settings, refunds.
               </li>
               <li>
                 <strong className="text-sky-700">Counter</strong> — collect payments, walk-in

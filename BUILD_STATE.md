@@ -4,11 +4,12 @@ Last updated: 2026-11-12
 
 ## Current phase
 
-Phase 10 — Live. The Supabase Free project is running in Mumbai, all five
-migrations are applied, the three staff accounts exist, the production build is
-deployed to Cloudflare Pages, and the live order lifecycle passed 31/31 checks.
-Remaining work is operational: dev TOTP enrollment, GitHub Actions secrets for
-backups/keep-alive, and a pilot shift.
+Phase 10 — Live. The Supabase Free project is running in Mumbai, migrations are
+applied (including `0006_remove_dev_aal2`), the three staff accounts exist, the
+app is deployed to Cloudflare Pages, and the live order lifecycle passed 31/31
+checks. Dev login no longer requires an authenticator/TOTP after password sign-in.
+Remaining work is operational: GitHub Actions secrets for backups/keep-alive and
+a pilot shift.
 
 ## Locked decisions
 
@@ -17,7 +18,7 @@ backups/keep-alive, and a pilot shift.
 - Customers: guests only, no accounts, no OTP.
 - Order access: high-entropy token in URL fragment (`/order#<token>`); server stores SHA-256 hash only.
 - Staff roles: `dev`, `counter`, `kitchen`.
-- `dev`: full access, TOTP MFA required for privileged actions.
+- `dev`: full access (email/password login). Dev-only actions are enforced by role in the database.
 - `counter`: payments, walk-in orders, cancel unpaid, availability toggle, history.
 - `kitchen`: paid orders only, preparation status.
 - Payment: no online gateway. Counter verifies cash/UPI/card physically.
@@ -35,7 +36,7 @@ backups/keep-alive, and a pilot shift.
 
 `AWAITING_PAYMENT -> CANCELLED` by counter/dev.
 
-Paid orders -> `CANCELLED` + `REFUNDED` by dev only (AAL2).
+Paid orders -> `CANCELLED` + `REFUNDED` by dev only.
 
 ## Build checklist
 
@@ -46,7 +47,7 @@ Paid orders -> `CANCELLED` + `REFUNDED` by dev only (AAL2).
 - [x] 1E. Realtime + pg_cron migration (`0005_realtime_cron.sql`)
 - [x] 2. Supabase project created and migrations applied (`xkdcckekjtqigmgbanrl`, `ap-south-1`, Free)
 - [x] 3a. Staff Auth users and role rows created; signups disabled
-- [ ] 3b. Dev TOTP enrollment (requires the owner's authenticator app)
+- [x] 3b. Dev authenticator/TOTP requirement removed after login (password-only admin access)
 - [x] 4. Frontend foundation (types, client, query, cart, auth)
 - [x] 5. Customer menu -> cart -> checkout -> token status
 - [x] 6. Counter queue -> mark paid -> kitchen board
@@ -65,7 +66,7 @@ Paid orders -> `CANCELLED` + `REFUNDED` by dev only (AAL2).
 - Staff console: https://sadda-dhaba.pages.dev/admin
 - Supabase project: `xkdcckekjtqigmgbanrl` (`ap-south-1`, Free plan)
 - Cloudflare Pages project: `sadda-dhaba`
-- Auth: signups disabled, email/password only, TOTP enabled for MFA
+- Auth: signups disabled, staff email/password login (dev authenticator not required after login)
 - Staff: `dev`, `counter`, `kitchen` users created; role rows inserted
 - Database: 13 categories, 93 menu items, Realtime publication (orders,
   order_items, menu_items, categories), stale-order cron every 5 minutes
@@ -78,7 +79,8 @@ Paid orders -> `CANCELLED` + `REFUNDED` by dev only (AAL2).
 ### Backend
 
 - `supabase/migrations/0001_schema.sql` — staff, settings, categories, menu, orders, order items, tokens, events, indexes, updated_at triggers. Installs `pgcrypto` in `extensions` and `pg_cron` in `pg_catalog` to match Supabase.
-- `supabase/migrations/0002_rls.sql` — role helpers, paid-only kitchen visibility, dev AAL2 writes, explicit grants.
+- `supabase/migrations/0002_rls.sql` — role helpers, paid-only kitchen visibility, dev-role writes, explicit grants.
+- `supabase/migrations/0006_remove_dev_aal2.sql` — removes AAL2 requirement from `is_dev()` for existing/new deployments.
 - `supabase/migrations/0003_rpc.sql` — quote/create/get-by-token, mark-paid, status, cancel/refund, counter order, availability, token reissue, stale cancellation. All functions pin `search_path = public, extensions, pg_temp`; hardened JSON parsing and merged-quantity validation.
 - `supabase/migrations/0004_seed_menu.sql` — deterministic UUIDs, idempotent upserts, availability preserved.
 - `supabase/migrations/0005_realtime_cron.sql` — Realtime publication for orders/items/menu/categories, 5-minute stale-order job.
@@ -93,7 +95,7 @@ Paid orders -> `CANCELLED` + `REFUNDED` by dev only (AAL2).
 - `src/context/CartContext.tsx`, `ToastContext.tsx`, `StaffAuthContext.tsx`.
 - `src/hooks/useMenu.ts` — React Query queries, polling, realtime invalidation.
 - Customer: `CustomerApp`, `CategoryBar`, `MenuItemCard`, `CartDrawer`, `CheckoutModal`, `OrderStatusView`, `OrderStatusPage`.
-- Admin: `AdminLogin`, `MfaChallenge`, `LockScreen`, `AdminNavbar`, `AdminDashboard`, `CounterQueue`, `KitchenBoard`, `CollectPaymentModal`, `OrderDetailsModal`, `AddOrderModal`, `MenuManager`, `OrderHistory`, `Settings`.
+- Admin: `AdminLogin`, `LockScreen`, `AdminNavbar`, `AdminDashboard`, `CounterQueue`, `KitchenBoard`, `CollectPaymentModal`, `OrderDetailsModal`, `AddOrderModal`, `MenuManager`, `OrderHistory`, `Settings`. (`MfaChallenge` is no longer used in the login flow.)
 - Common: `Badge`, `Modal`, `ConfirmDialog`, `ConfigNotice`.
 - `src/App.tsx` — QueryClient, Toast, Cart, StaffAuth providers; routes `/`, `/order`, `/admin/*`.
 
@@ -114,36 +116,37 @@ runs migrations `0001`–`0005` against PGlite (PostgreSQL 18) with shims for
 `digest`/`gen_random_bytes`. Result: **44 passed, 0 failed**, covering
 seed counts, quoting, idempotency, token lookup/reissue, RLS visibility, the
 kitchen payment gate, payment audit, status transitions, refunds with/without
-AAL2, walk-ins, availability, cancellation, stale auto-cancel, and rate limits.
+walk-ins, availability, cancellation, stale auto-cancel, and rate limits.
 The 0005 publication/cron statements also apply in PGlite. The deployed
 Supabase project then passed 31/31 live checks covering the same critical paths
-against real Auth, PostgREST, RLS, and pg_cron.
+against real Auth, PostgREST, RLS, and pg_cron. After removing the AAL2 gate,
+`public.is_dev()` was updated live and in migrations so dev access works with
+password login only.
 
 ## Remaining
 
-- Enroll the dev account's TOTP factor at `/admin`, save the recovery code, and
-  verify AAL2 gates (refund, menu writes, settings).
 - Add `SUPABASE_DB_URL`, `BACKUP_PASSPHRASE`, `SUPABASE_URL`, and
   `SUPABASE_ANON_KEY` GitHub Actions secrets, then run both workflows once.
 - Test a restore from the encrypted backup artifact before the pilot.
-- Connect the GitHub repo to Cloudflare Pages for auto-deploy, or keep using
-  `wrangler pages deploy dist --project-name sadda-dhaba`.
+- Deploy the latest frontend build to Cloudflare Pages (direct upload or by
+  connecting the GitHub repo for auto-deploy).
 - Run a pilot shift, then monitor the counter queue, kitchen board, and history.
 
 ## Next move
 
-1. Sign in at `/admin` with the dev account and complete TOTP enrollment.
-2. Add the four GitHub Actions secrets from the local credentials file and
-   trigger `backup.yml` and `keep-alive.yml` once.
+1. Build and deploy the latest frontend so the live site no longer shows the
+   authenticator step for dev login.
+2. Add the four GitHub Actions secrets and trigger `backup.yml` and
+   `keep-alive.yml` once.
 3. Download the encrypted backup artifact and verify a restore into a scratch
    project.
 4. Connect the repository in the Cloudflare Pages dashboard if automatic
-   deploys are wanted; otherwise deploy with Wrangler after each build.
+   deploys are wanted.
 
 ## Operational reminders
 
 - Supabase Free pauses after 7 days of low activity and has no automatic backups.
 - GitHub may disable scheduled workflows after 60 days of repository inactivity; re-enable or run `workflow_dispatch` monthly.
-- The dev TOTP setup key must be stored offline. Losing it requires an owner/admin reset in Supabase.
+- Dev TOTP/authenticator is not required for admin login in the current setup. Re-enable MFA only if you also restore AAL2 checks in the app and database.
 - Never place the `service_role` key in the frontend or Cloudflare environment.
 - Menu changes and refunds are audited in `order_events`; check the audit trail if totals or statuses look wrong.

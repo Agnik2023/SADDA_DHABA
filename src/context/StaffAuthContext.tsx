@@ -212,7 +212,7 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     [session, signIn]
   );
 
-  const mfaRequired = staff?.role === "dev" && currentLevel !== "aal2";
+  const mfaRequired = false;
 
   const value = useMemo<StaffAuthContextValue>(
     () => ({
